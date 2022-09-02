@@ -1,0 +1,85 @@
+
+DELIMITER $$
+CREATE DEFINER=`root`@`localhost` PROCEDURE `Member_Info_Query`(in MEMS_LIST varchar(250) )
+    READS SQL DATA
+BEGIN
+WITH 
+cte_dtc  AS (
+SELECT 	msc.master_station_code,
+ti.member_code,
+case when ti.renegotiated_date IS NULL and  ti.closed_date IS NOT NULL then abs(datediff(ti.processed_date, ti.closed_date))
+	when ti.renegotiated_date IS NOT NULL  and  ti.closed_date IS NOT NULL  then abs(datediff(ti.renegotiated_date,ti.closed_date))
+	when ti.renegotiated_date IS  NULL and ti.closed_date IS  NULL then abs(datediff(ti.processed_date,current_date))
+    when ti.renegotiated_date IS NOT NULL and ti.closed_date IS NULL then abs(datediff(ti.processed_date,ti.renegotiated_date))
+    end as day_to_close
+FROM ontonecall.masterstationcode msc join ontonecall.ticketinfo ti
+on msc.member_code=ti.member_code
+where ti.member_code in (MEMS_LIST)
+), cte_stage2 AS(
+select c.member_code, 
+c.day_to_close,
+case when c.day_to_close <= 5 then "0-5"
+	when c.day_to_close > 5 and c.day_to_close <= 10 then "5-10"
+    when c.day_to_close > 10 and c.day_to_close <= 16 then "11-15"
+    when c.day_to_close > 16 then "15+"
+    end as Time_to_respond,
+case when c.day_to_close <= 5 then 1
+	else 0
+    end as compliance,
+case when c.day_to_close >5 then 1
+	else 0
+    end as non_compliance
+from cte_dtc c join ontonecall.ticketinfo t on t.member_code = c.member_code
+), 
+cte_stage3 AS(
+select sum(s2.compliance)+sum(s2.non_compliance) as total from cte_stage2 s2
+)
+Select s2.time_to_respond,
+case when sum(s2.non_compliance) = 0 then CONCAT(ROUND(sum(s2.compliance)/s3.Total*100, 2),"%")
+	when sum(s2.compliance) = 0 then CONCAT(ROUND(sum(s2.non_compliance)DELIMITER $$
+CREATE DEFINER=`root`@`localhost` PROCEDURE `Member_Info_Query`(in MEMS_LIST varchar(250) )
+    READS SQL DATA
+BEGIN
+
+    SET @s = CONCAT('',MEMS_LIST,'');
+WITH 
+cte_dtc  AS (
+SELECT 	msc.master_station_code,
+ti.member_code,
+case when ti.renegotiated_date IS NULL and  ti.closed_date IS NOT NULL then abs(datediff(ti.processed_date, ti.closed_date))
+	when ti.renegotiated_date IS NOT NULL  and  ti.closed_date IS NOT NULL  then abs(datediff(ti.renegotiated_date,ti.closed_date))
+	when ti.renegotiated_date IS  NULL and ti.closed_date IS  NULL then abs(datediff(ti.processed_date,current_date))
+    when ti.renegotiated_date IS NOT NULL and ti.closed_date IS NULL then abs(datediff(ti.processed_date,ti.renegotiated_date))
+    end as day_to_close
+FROM ontonecall.masterstationcode msc join ontonecall.ticketinfo ti
+on msc.member_code=ti.member_code
+where @s like CONCAT('%',ti.member_code,'%') 
+), cte_stage2 AS(
+select c.member_code, 
+c.day_to_close,
+case when c.day_to_close <= 5 then "0-5"
+	when c.day_to_close > 5 and c.day_to_close <= 10 then "5-10"
+    when c.day_to_close > 10 and c.day_to_close <= 16 then "11-15"
+    when c.day_to_close > 16 then "15+"
+    end as Time_to_respond,
+case when c.day_to_close <= 5 then 1
+	else 0
+    end as compliance,
+case when c.day_to_close >5 then 1
+	else 0
+    end as non_compliance
+from cte_dtc c join ontonecall.ticketinfo t on t.member_code = c.member_code
+), 
+cte_stage3 AS(
+select sum(s2.compliance)+sum(s2.non_compliance) as total from cte_stage2 s2
+)
+Select s2.time_to_respond,
+case when sum(s2.non_compliance) = 0 then CONCAT(ROUND(sum(s2.compliance)/s3.Total*100, 2),"%")
+	when sum(s2.compliance) = 0 then CONCAT(ROUND(sum(s2.non_compliance)/s3.Total*100, 2),"%")
+    end as 'Percentage',
+sum(s2.compliance) as 'Compliant',
+sum(s2.non_compliance) as 'Non-Compliance'
+from cte_stage2 s2 cross join cte_stage3 s3
+group by s2.time_to_respond
+order by s2.time_to_respond;
+END$$
